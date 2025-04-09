@@ -59,8 +59,8 @@
             var M_L = CholeskyPreconditioner(A);
             var x = new double[A.GetLength(0)];
             var r = VectorSubtract(b, MatrixVectorMultiply(A, x));
-            var z = SolveUpperTriangular(M_L, SolveLowerTriangular(M_L, ScalarAndVectorMultiply(-1, r)));
-            var p = z;// ScalarAndVectorMultiply(-1, z);
+            var z = SolveUpperTriangular(M_L, SolveLowerTriangular(M_L, r));
+            var p = z;
             var rho = VectorScalarMultiply(r, z);
             int i;
             for (i = 0; i < maxIterations; i++)
@@ -69,7 +69,7 @@
                 var alpha = rho / VectorScalarMultiply(p, Ap);
                 x = VectorAdd(x, ScalarAndVectorMultiply(alpha, p));
                 r = VectorSubtract(r, ScalarAndVectorMultiply(alpha, Ap));
-                z = SolveUpperTriangular(M_L, SolveLowerTriangular(M_L, ScalarAndVectorMultiply(-1, r)));
+                z = SolveUpperTriangular(M_L, SolveLowerTriangular(M_L, r));
                 var rho_new = VectorScalarMultiply(r, z);
                 if (Math.Sqrt(rho_new) < tolerance)
                 {
@@ -77,7 +77,7 @@
                     return x;
                 }
                 var beta = rho_new / rho;
-                p = VectorAdd(ScalarAndVectorMultiply(beta, p), ScalarAndVectorMultiply(-1, z));
+                p = VectorAdd(ScalarAndVectorMultiply(beta, p), z);
                 rho = rho_new;
             }
             Console.WriteLine("максимум итераций");
