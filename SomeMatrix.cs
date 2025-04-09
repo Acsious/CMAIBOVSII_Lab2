@@ -56,33 +56,105 @@
 
         public static double[] PreconditionedConjugateGradientMethod(double[][] A, double[] b, double tolerance = 1e-6, int maxIterations = 500)
         {
-            int n = A.GetLength(0);
-            var x = new double[n];
-            var r = VectorSubtract(b, MatrixVectorMultiply(A, x)); // невязка
-            var z = SolvePreconditioner(A, r);
-            var p = z; //направление
-
-            for (int iteration = 0; iteration < maxIterations; iteration++)
+            var M_L = CholeskyPreconditioner(A);
+            var x = new double[A.GetLength(0)];
+            var r = VectorSubtract(b, MatrixVectorMultiply(A, x));
+            var z = SolveUpperTriangular(M_L, SolveLowerTriangular(M_L, ScalarAndVectorMultiply(-1, r)));
+            var p = z;// ScalarAndVectorMultiply(-1, z);
+            var rho = VectorScalarMultiply(r, z);
+            int i;
+            for (i = 0; i < maxIterations; i++)
             {
-                var alpha = VectorScalarMultiply(r, z) / VectorScalarMultiply(p, MatrixVectorMultiply(A, p));
+                var Ap = MatrixVectorMultiply(A, p);
+                var alpha = rho / VectorScalarMultiply(p, Ap);
                 x = VectorAdd(x, ScalarAndVectorMultiply(alpha, p));
-                var r_new = VectorSubtract(r, ScalarAndVectorMultiply(alpha, MatrixVectorMultiply(A, p)));
-
-                if (Math.Sqrt(VectorScalarMultiply(r_new, r_new)) < tolerance)
+                r = VectorSubtract(r, ScalarAndVectorMultiply(alpha, Ap));
+                z = SolveUpperTriangular(M_L, SolveLowerTriangular(M_L, ScalarAndVectorMultiply(-1, r)));
+                var rho_new = VectorScalarMultiply(r, z);
+                if (Math.Sqrt(rho_new) < tolerance)
                 {
-                    Console.WriteLine($"Кол-во итераций: {iteration + 1}");
+                    Console.WriteLine($"Кол-во итераций: {i + 1}");
                     return x;
                 }
+                var beta = rho_new / rho;
+                p = VectorAdd(ScalarAndVectorMultiply(beta, p), ScalarAndVectorMultiply(-1, z));
+                rho = rho_new;
+            }
+            Console.WriteLine("максимум итераций");
+            return x;
+        }
 
-                var z_new = SolvePreconditioner(A, r_new); 
-                var beta = VectorScalarMultiply(r_new, z_new) / VectorScalarMultiply(r, z);
-                p = VectorAdd(z_new, ScalarAndVectorMultiply(beta, p)); 
-
-                r = r_new;
-                z = z_new;
+        public static double[][] CholeskyPreconditioner(double[][] A)
+        {
+            int n = A.Length;
+            double[][] L = new double[n][];
+            for (int i = 0; i < n; i++)
+            {
+                L[i] = new double[n];
             }
 
-            Console.WriteLine("максимум итераций");
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j <= i; j++)
+                {
+                    double sum = 0.0;
+                    for (int k = 0; k < j; k++)
+                    {
+                        if (L[i][k] != 0 && L[j][k] != 0)
+                        {
+                            sum += L[i][k] * L[j][k];
+                        }
+                    }
+
+                    if (i == j)
+                    {
+                        L[i][i] = Math.Sqrt(A[i][i] - sum);
+                    }
+                    else
+                    {
+                        if (L[j][j] != 0 && A[i][j] != 0)
+                            L[i][j] = (A[i][j] - sum) / L[j][j];
+
+                    }
+                }
+            }
+            return L;
+        }
+
+        /// <summary> Lx = b </summary>
+        public static double[] SolveLowerTriangular(double[][] L, double[] b)
+        {
+            int n = b.Length;
+            double[] x = new double[n];
+
+            for (int i = 0; i < n; i++)
+            {
+                double sum = 0.0;
+                for (int j = 0; j < i; j++)
+                {
+                    sum += L[i][j] * x[j];
+                }
+                x[i] = (b[i] - sum) / L[i][i];
+            }
+
+            return x;
+        }
+
+        /// <summary> L^T x = b </summary>
+        public static double[] SolveUpperTriangular(double[][] L, double[] b)
+        {
+            int n = b.Length;
+            double[] x = new double[n];
+
+            for (int i = n - 1; i >= 0; i--)
+            {
+                double sum = 0.0;
+                for (int j = i + 1; j < n; j++)
+                {
+                    sum += L[j][i] * x[j];
+                }
+                x[i] = (b[i] - sum) / L[i][i];
+            }
             return x;
         }
 
@@ -154,14 +226,45 @@
             return result;
         }
 
-        // предобуславливатель якоби
-        public static double[] SolvePreconditioner(double[][] A, double[] r)
+        /* //версия с якоби
+        public static double[] PreconditionedConjugateGradientMethod(double[][] A, double[] b, double tolerance = 1e-6, int maxIterations = 500)
+        {
+            var x = new double[A.GetLength(0)];
+            var r = VectorSubtract(b, MatrixVectorMultiply(A, x)); // невязка
+            var z = JakobiPreconditioner(A, r);
+            var p = z; //направление
+
+            for (int iteration = 0; iteration < maxIterations; iteration++)
+            {
+                var alpha = VectorScalarMultiply(r, z) / VectorScalarMultiply(p, MatrixVectorMultiply(A, p));
+                x = VectorAdd(x, ScalarAndVectorMultiply(alpha, p));
+                var r_new = VectorSubtract(r, ScalarAndVectorMultiply(alpha, MatrixVectorMultiply(A, p)));
+
+                if (Math.Sqrt(VectorScalarMultiply(r_new, r_new)) < tolerance)
+                {
+                    Console.WriteLine($"Кол-во итераций: {iteration + 1}");
+                    return x;
+                }
+
+                var z_new = JakobiPreconditioner(A, r_new);
+                var beta = VectorScalarMultiply(r_new, z_new) / VectorScalarMultiply(r, z);
+                p = VectorAdd(z_new, ScalarAndVectorMultiply(beta, p));
+
+                r = r_new;
+                z = z_new;
+            }
+
+            Console.WriteLine("максимум итераций");
+            return x;
+        }
+
+        public static double[] JakobiPreconditioner(double[][] A, double[] r)
         {
             int n = A.GetLength(0);
             double[] z = new double[n];
             for (int i = 0; i < n; i++)
             {
-                if (A[i][i] != 0)  
+                if (A[i][i] != 0)
                 {
                     z[i] = r[i] / A[i][i]; // диагональ
                 }
@@ -172,5 +275,6 @@
             }
             return z;
         }
+        */
     }
 }
